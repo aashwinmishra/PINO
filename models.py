@@ -49,3 +49,25 @@ class FNO1d(nn.Module):
     return self.output_layer(x)                       #[batchsize, N, 1]
 
 
+class SpectralConv2d(nn.Module):
+  def __init__(self, 
+               in_channels: int, 
+               out_channels: int, 
+               modes1: int, 
+               modes2: int):
+    super().__init__()
+    self.modes1 = modes1
+    self.modes2 = modes2
+    self.out_channels = out_channels
+    self.scale = 1.0 / (in_channels * out_channels)
+    self.weights1 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, modes1, modes2, dtype=torch.cfloat))
+    self.weights2 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, modes1, modes2, dtype=torch.cfloat))
+
+  def forward(self, x: torch.tensor):
+    x_ft = torch.fft.rfft2(x)                               #[B, C, H, W//2 + 1]
+    out_ft = torch.zeros(x.shape[0], self.out_channels, x_ft.shape[-2], x_ft.shape[-1], device=x.device, dtype=torch.cfloat)
+    out_ft[:, :, :self.modes1, :self.modes2] = (x_ft[:,:,:self.modes1, :self.modes2].permute(2, 3, 0, 1) @ self.weights1.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+    out_ft[:, :, -self.modes1:, :self.modes2] = (x_ft[:,:,-self.modes1:, :self.modes2].permute(2, 3, 0, 1) @ self.weights1.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+    return torch.fft.irfft2(out_ft, s=(x.size(-2), x.size(-1)))
+
+
