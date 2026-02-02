@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from torchmetrics.functional.image import structural_similarity_index_measure
 
 
 def FRC(true_image: torch.tensor, 
@@ -33,4 +34,23 @@ def FRC(true_image: torch.tensor,
       frc.append((top / (bottom + 1e-8)).item())
   return np.array(frc)
 
+
+def SSIM(true_image: torch.Tensor, 
+         pred_image: torch.Tensor, 
+         data_range: float | tuple = 1.0)->float:
+    """
+    Computes SSIM between torch tensors, with shapes 
+    [Batch, Channel, Height, Width] or [Channel, Height, Width].
+    Args:
+        true_image: Target images of shape [C, H, W]/[B, C, H, W].
+        pred_image: Prediction of shape [C, H, W]/[B, C, H, W].
+        data_range: Range of data (tuple or float).
+    Returns:
+        Float value of the SSIM.
+    """
+    if true_image.ndim == 3:
+        true_image = true_image.unsqueeze(0)
+    if pred_image.ndim == 3:
+        pred_image = pred_image.unsqueeze(0)
+    return ssim_fn(pred_image, true_image, data_range=data_range).detach().item()
 
