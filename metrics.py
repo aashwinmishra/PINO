@@ -3,6 +3,19 @@ import numpy as np
 from torchmetrics.functional.image import structural_similarity_index_measure
 
 
+def ptycho_complex_mse(pred, target):
+  pred_amp = pred[..., 0]
+  pred_phi = pred[..., 1]
+  target_amp = target[..., 0]
+  target_phi = target[..., 1]
+  p_real = pred_amp * torch.cos(pred_phi)
+  p_imag = pred_amp * torch.sin(pred_phi)
+  t_real = target_amp * torch.cos(target_phi)
+  t_imag = target_amp * torch.sin(target_phi)
+  loss = torch.mean((p_real - t_real)**2 + (p_imag - t_imag)**2)
+  return loss
+
+
 def FRC(true_image: torch.tensor, 
         pred_image: torch.tensor, 
         bin_width: int=1):
