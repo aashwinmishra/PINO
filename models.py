@@ -76,18 +76,19 @@ class SpectralConv2d(nn.Module):
 
 
 class FNO2d(nn.Module):
-  def __init__(self, 
-               modes1: int, 
-               modes2: int, 
-               width: int, 
+  def __init__(self,
+               modes1: int,
+               modes2: int,
+               width: int,
                num_layers: int,
-               padding_frac: float=1.0,
-               in_channels: int=1):
+               padding_frac: float=0.25,
+               in_channels: int=1,
+               out_channels: int=2):
     super().__init__()
-    self.modes1 = modes1 
+    self.modes1 = modes1
     self.modes2 = modes2
-    self.width = width 
-    self.num_layers = num_layers 
+    self.width = width
+    self.num_layers = num_layers
     self.padding_frac = padding_frac
     self.linear_p = nn.Linear(in_channels, width)
     self.conv_list = nn.ModuleList([
@@ -96,8 +97,11 @@ class FNO2d(nn.Module):
     self.spec_list = nn.ModuleList([
         SpectralConv2d(width, width, modes1, modes2) for _ in range(num_layers)
     ])
+    self.norm_list = nn.ModuleList([
+        nn.InstanceNorm2d(width) for _ in range(num_layers)
+    ])
     self.linear_q = nn.Linear(width, 128)
-    self.output_layer = nn.Linear(128, 1)
+    self.output_layer = nn.Linear(128, out_channels)
     self.activation = nn.GELU()
 
   def forward(self, x: torch.tensor):
@@ -106,12 +110,19 @@ class FNO2d(nn.Module):
     x1_padding = int(round(x.shape[-1] * self.padding_frac))
     x2_padding = int(round(x.shape[-2] * self.padding_frac))
     x = nn.functional.pad(x, [0, x1_padding, 0, x2_padding])
-    for s, c in zip(self.spec_list, self.conv_list):
-      x = self.activation(s(x) + c(x))
-     x = x[..., :x.size(-2)-x2_padding, :x.size(-1)-x1_padding]
+    for spec, conv, norm in zip(self.spec_list, self.conv_list, self.norm_list):
+      x1 = spec(x)
+      x2 = conv(x)
+      x = x1 + x2
+      x = norm(x)
+      x = self.activation(x)
+    x = x[..., :x.size(-2)-x2_padding, :x.size(-1)-x1_padding]
     x = x.permute(0, 2, 3, 1)
     x = self.linear_q(x)
     x = self.activation(x)
-    return self.output_layer(x)  
-
-
+    x = self.output_layer(x)
+    amp_logit = x[..., 0]
+    phase_logit = x[..., 1]
+    amplitude = torch.sigmoid(amp_logit)
+    phase = torch.tanh(phase_logit) * torch.pi
+    return torch.stack([amplitude, phase], dim=-1)
