@@ -3,7 +3,28 @@ import numpy as np
 from torchmetrics.functional.image import structural_similarity_index_measure
 
 
-def ptycho_complex_mse(pred, target):
+def ptycho_fno_loss(pred: torch.tensor, 
+                    target: torch.tensor):
+  """
+  Loss function for Ptycho Reconstruction that respects the phase's 
+  periodic nature. Weighs the amplitude and phase losses relative to 
+  each other.
+  """
+    pred_amp = pred[..., 0]
+    pred_phi = pred[..., 1]
+    target_amp = target[..., 0]
+    target_phi = target[..., 1]
+    loss_amp = torch.nn.functional.mse_loss(pred_amp, target_amp)
+    loss_phase = torch.mean(1 - torch.cos(pred_phi - target_phi))
+    return 1.0 * loss_amp + 1.0 * loss_phase
+
+
+def ptycho_complex_mse(pred: torch.tensor, 
+                       target: torch.tensor):
+  """
+  Loss function for Ptycho Reconstruction that reconstructs the input, 
+  and calculates the loss in complex space.
+  """
   pred_amp = pred[..., 0]
   pred_phi = pred[..., 1]
   target_amp = target[..., 0]
